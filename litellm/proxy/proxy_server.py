@@ -213,6 +213,10 @@ from litellm.caching.caching import DualCache, RedisCache
 from litellm.caching.redis_cluster_cache import RedisClusterCache
 from litellm.proxy.common_utils.timezone_utils import get_budget_reset_time
 from litellm.proxy.common_utils.user_api_key_cache import UserApiKeyCache
+from litellm.proxy.starswarm_chat_proxy import (
+    StarSwarmProxyError,
+    maybe_handle_starswarm_chat_completion,
+)
 from litellm.constants import (
     _REALTIME_BODY_CACHE_SIZE,
     APSCHEDULER_COALESCE,
@@ -7937,6 +7941,14 @@ async def chat_completion(  # noqa: PLR0915
     global general_settings, user_debug, proxy_logging_obj, llm_model_list
     global user_temperature, user_request_timeout, user_max_tokens, user_api_base
     data = await _read_request_body(request=request)
+    try:
+        starswarm_response = await maybe_handle_starswarm_chat_completion(
+            request=request, data=data
+        )
+        if starswarm_response is not None:
+            return starswarm_response
+    except StarSwarmProxyError as e:
+        return JSONResponse(status_code=e.status_code, content={"error": e.error})
     if user_api_key_dict is not None:
         if not isinstance(data.get("metadata"), dict):
             # Covers both missing and JSON-string metadata (multipart /
