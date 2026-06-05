@@ -1,0 +1,54 @@
+# StarSwarm LiteLLM Proxy 配置
+#
+# 使用方式：
+#   litellm --config starswarm_config.yaml --port 4000
+#
+# 用户调用示例（Python）：
+#   from openai import OpenAI
+#   client = OpenAI(api_key="sk-xxxx", base_url="http://localhost:4000/v1")
+#   resp = client.chat.completions.create(model="starswarm-auto", messages=[...], stream=True)
+#
+# 用户调用示例（curl）：
+#   curl http://localhost:4000/v1/chat/completions \
+#     -H "Authorization: Bearer sk-xxxx" \
+#     -H "Content-Type: application/json" \
+#     -d '{"model":"starswarm-auto","stream":true,"messages":[{"role":"user","content":"你好"}]}'
+#
+# 认证说明：
+#   LiteLLM 不做自己的 key 管理，Authorization 头直接透传给 StarSwarm。
+#   用户使用的是 StarSwarm 颁发的 sk-xxxx，计费也在 StarSwarm 侧完成。
+
+model_list:
+  # 自动选模型（推荐）
+  - model_name: "starswarm-auto"
+    litellm_params:
+      model: "openai/starswarm-auto"
+      api_base: "http://localhost:35099"
+      api_key: "passthrough"          # 实际 key 由请求 Authorization 头提供
+
+  # 通配符：把任意模型名转发给 StarSwarm
+  # 用户可直接写具体模型名，如 "qwen-72b-instruct"
+  - model_name: "*"
+    litellm_params:
+      model: "openai/*"
+      api_base: "http://localhost:35099"
+      api_key: "passthrough"
+
+litellm_settings:
+  drop_params: True           # 忽略 StarSwarm 不支持的 OpenAI 参数（temperature 等）
+  telemetry: False
+  request_timeout: 300
+
+general_settings:
+  disable_master_key_return: True
+  # LiteLLM 不拦截 auth，直接转发给 StarSwarm 鉴权
+  # 如果需要 LiteLLM 自己管 key，去掉下面注释并设置 master_key
+  # master_key: "sk-litellm-master-xxxx"
+
+  # 透传 Authorization 头，让 StarSwarm 用用户自己的 key 做鉴权和计费
+  pass_through_endpoints:
+    - path: "/v1/chat/completions"
+      target: "http://localhost:35099/v1/chat/completions"
+      forward_headers: True
+      headers:
+        content-type: "application/json"
